@@ -436,6 +436,11 @@ int zmq::socket_base_t::getsockopt (int option_, void *optval_,
         return 0;
     }
 
+    if (option_ == ZMQ_PEER_EVENTS) {
+            errno = EINVAL;
+            return -1;
+    }
+
     if (option_ == ZMQ_LAST_ENDPOINT) {
         if (*optvallen_ < last_endpoint.size () + 1) {
             errno = EINVAL;

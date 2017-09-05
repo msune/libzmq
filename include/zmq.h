@@ -265,6 +265,9 @@ ZMQ_EXPORT int zmq_msg_init_data (zmq_msg_t *msg, void *data,
     size_t size, zmq_free_fn *ffn, void *hint);
 ZMQ_EXPORT int zmq_msg_send (zmq_msg_t *msg, void *s, int flags);
 ZMQ_EXPORT int zmq_msg_recv (zmq_msg_t *msg, void *s, int flags);
+ZMQ_EXPORT int zmq_recv_peer (void *s, void *zid, int zid_len, void *buf,
+                                                               size_t len,
+                                                               int flags);
 ZMQ_EXPORT int zmq_msg_close (zmq_msg_t *msg);
 ZMQ_EXPORT int zmq_msg_move (zmq_msg_t *dest, zmq_msg_t *src);
 ZMQ_EXPORT int zmq_msg_copy (zmq_msg_t *dest, zmq_msg_t *src);
@@ -371,6 +374,18 @@ ZMQ_EXPORT const char *zmq_msg_gets (const zmq_msg_t *msg, const char *property)
 #define ZMQ_VMCI_BUFFER_MAX_SIZE 87
 #define ZMQ_VMCI_CONNECT_TIMEOUT 88
 #define ZMQ_USE_FD 89
+#define ZMQ_PEER_EVENTS 90
+
+/*  getsockopt additional struct to recover peer events                       */
+typedef struct zmq_gso_peer_events_t
+{
+    void *zid;
+    int zid_len;
+    short events;
+    short padding;
+}  zmq_gso_peer_events_t;
+
+#define ZMQ_GSO_PEER_EVS_SIZE (size_t)sizeof(zmq_gso_peer_events_t)
 
 /*  Message options                                                           */
 #define ZMQ_MORE 1
@@ -639,17 +654,32 @@ typedef struct zmq_poller_event_t
 #else
     int fd;
 #endif
+    void *zid;
+    int zid_len;
     void *user_data;
     short events;
 } zmq_poller_event_t;
 
 ZMQ_EXPORT void *zmq_poller_new (void);
 ZMQ_EXPORT int  zmq_poller_destroy (void **poller_p);
-ZMQ_EXPORT int  zmq_poller_add (void *poller, void *socket, void *user_data, short events);
+ZMQ_EXPORT int  zmq_poller_add (void *poller, void *socket, void *user_data,
+                                                            short events);
+ZMQ_EXPORT int  zmq_poller_add_peer (void *poller, void *socket, void *zid,
+                                                            int zid_len,
+                                                            void *user_data,
+                                                            short events);
 ZMQ_EXPORT int  zmq_poller_modify (void *poller, void *socket, short events);
+ZMQ_EXPORT int  zmq_poller_modify_peer (void *poller, void *socket, void *zid,
+                                                            int zid_len,
+                                                            short events);
 ZMQ_EXPORT int  zmq_poller_remove (void *poller, void *socket);
-ZMQ_EXPORT int  zmq_poller_wait (void *poller, zmq_poller_event_t *event, long timeout);
-ZMQ_EXPORT int  zmq_poller_wait_all (void *poller, zmq_poller_event_t *events, int n_events, long timeout);
+ZMQ_EXPORT int  zmq_poller_remove_peer (void *poller, void *socket, void *zid,
+                                                            int zid_len);
+ZMQ_EXPORT int  zmq_poller_wait (void *poller, zmq_poller_event_t *event,
+                                                            long timeout);
+ZMQ_EXPORT int  zmq_poller_wait_all (void *poller, zmq_poller_event_t *events,
+                                                            int n_events,
+                                                            long timeout);
 
 #if defined _WIN32
 ZMQ_EXPORT int zmq_poller_add_fd (void *poller, SOCKET fd, void *user_data, short events);

@@ -61,13 +61,30 @@ namespace zmq
         {
             socket_base_t *socket;
             fd_t fd;
+            void *zid;
+            int zid_len;
             void *user_data;
             short events;
         } event_t;
 
-        int add (socket_base_t *socket, void *user_data, short events);
-        int modify (socket_base_t *socket, short events);
-        int remove (socket_base_t *socket);
+
+        int add (socket_base_t *socket, void *zid, int zid_len,
+                        void *user_data, short events);
+        inline int add (socket_base_t *socket, void *user_data, short events) {
+            return add(socket, NULL, 0, user_data, events);
+        };
+
+
+        int modify (socket_base_t *socket, void *zid, int zid_len,
+                                                      short events);
+        inline int modify (socket_base_t *socket, short events) {
+            return modify(socket, NULL, 0, events);
+        };
+
+        int remove (socket_base_t *socket, void *zid, int zid_len);
+        inline int remove (socket_base_t *socket) {
+            return remove(socket, NULL, 0);
+        };
 
         int add_fd (fd_t fd, void *user_data, short events);
         int modify_fd (fd_t fd, short events);
@@ -81,6 +98,11 @@ namespace zmq
         bool check_tag ();
 
     private:
+        void zero_trail_events(zmq::socket_poller_t::event_t *events_,
+                                                          int n_events_,
+                                                          int found);
+        int check_events(zmq::socket_poller_t::event_t *events_, int n_events_,
+                                                          int& found);
         void rebuild ();
 
         //  Used to check whether the object is a socket_poller.
@@ -94,6 +116,8 @@ namespace zmq
             fd_t fd;
             void *user_data;
             short events;
+            void *zid;
+            int zid_len;
 #if defined ZMQ_POLL_BASED_ON_POLL
             int  pollfd_index;
 #endif

@@ -90,6 +90,9 @@ namespace zmq
         int term_endpoint (const char *addr_);
         int send (zmq::msg_t *msg_, int flags_);
         int recv (zmq::msg_t *msg_, int flags_);
+        int recv_peer (void *zid, int zid_len, zmq::msg_t *msg_, int flags_) {
+            return -1;
+        };
         int add_signaler (signaler_t *s);
         int remove_signaler (signaler_t *s);
         int close ();
