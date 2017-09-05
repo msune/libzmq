@@ -449,6 +449,25 @@ static int s_recvmsg (zmq::socket_base_t *s_, zmq_msg_t *msg_, int flags_)
     return (int) (sz < INT_MAX ? sz : INT_MAX);
 }
 
+#ifdef ZMQ_BUILD_DRAFT_API
+
+static int
+s_recvmsg_peer (zmq::socket_base_t *s_, const void *routing_id,
+                       const int routing_id_len,
+                       zmq_msg_t *msg_,
+                       int flags_)
+{
+    int rc = s_->recv_peer (routing_id, routing_id_len, (zmq::msg_t *) msg_, flags_);
+    if (unlikely (rc < 0))
+        return -1;
+
+    //  Truncate returned size to INT_MAX to avoid overflow to negative values
+    size_t sz = zmq_msg_size (msg_);
+    return (int) (sz < INT_MAX? sz: INT_MAX);
+}
+
+#endif // ZMQ_BUILD_DRAFT_API
+
 /*  To be deprecated once zmq_msg_recv() is stable                           */
 int zmq_recvmsg (void *s_, zmq_msg_t *msg_, int flags_)
 {
@@ -487,6 +506,65 @@ int zmq_recv (void *s_, void *buf_, size_t len_, int flags_)
 
     return nbytes;
 }
+
+#ifdef ZMQ_BUILD_DRAFT_API
+
+int zmq_msg_recv_peer (zmq_msg_t *msg_, void *s_,
+                                     const void *routing_id,
+                                     const int routing_id_len,
+                                     int flags_)
+{
+    zmq::socket_base_t *s = as_socket_base_t (s_);
+    if (!s)
+        return -1;
+    return s_recvmsg_peer (s, routing_id, routing_id_len, msg_, flags_);
+}
+
+
+int zmq_recv_peer (void *s_, const void *routing_id, const int routing_id_len,
+                       void *buf_,
+                       size_t len_,
+                       int flags_)
+{
+    zmq::socket_base_t *s = as_socket_base_t (s_);
+    if (!s)
+        return -1;
+
+    if(!routing_id || routing_id_len <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    //TODO: check right socket type
+
+    zmq_msg_t msg;
+    int rc = zmq_msg_init (&msg);
+    errno_assert (rc == 0);
+
+    int nbytes = s_recvmsg_peer (s, routing_id, routing_id_len, &msg, flags_);
+    if (unlikely (nbytes < 0)) {
+        int err = errno;
+        rc = zmq_msg_close (&msg);
+        errno_assert (rc == 0);
+        errno = err;
+        return -1;
+    }
+
+    //  An oversized message is silently truncated.
+    size_t to_copy = size_t (nbytes) < len_ ? size_t (nbytes) : len_;
+
+    //  We explicitly allow a null buffer argument if len is zero
+    if (to_copy) {
+        assert (buf_);
+        memcpy (buf_, zmq_msg_data (&msg), to_copy);
+    }
+    rc = zmq_msg_close (&msg);
+    errno_assert (rc == 0);
+
+    return nbytes;
+}
+
+#endif //ZMQ_BUILD_DRAFT_API
 
 // Receive a multi-part message
 //
@@ -1202,6 +1280,8 @@ int zmq_poller_add (void *poller_, void *s_, void *user_data_, short events_)
       ->add (socket, user_data_, events_);
 }
 
+
+
 #if defined _WIN32
 int zmq_poller_add_fd (void *poller_,
                        SOCKET fd_,
@@ -1241,7 +1321,6 @@ int zmq_poller_modify (void *poller_, void *s_, short events_)
     return ((zmq::socket_poller_t *) poller_)->modify (socket, events_);
 }
 
-
 #if defined _WIN32
 int zmq_poller_modify_fd (void *poller_, SOCKET fd_, short events_)
 #else
@@ -1276,6 +1355,94 @@ int zmq_poller_remove (void *poller_, void *s_)
 
     return ((zmq::socket_poller_t *) poller_)->remove (socket);
 }
+
+#ifdef ZMQ_BUILD_DRAFT_API
+
+int zmq_poller_add_peer (void *poller_, void *s_, void *routing_id,
+                                                  int routing_id_len,
+                                                  void *user_data_,
+                                                  short events_)
+{
+    if (!poller_ || !((zmq::socket_poller_t*)poller_)->check_tag ()) {
+        errno = EFAULT;
+        return -1;
+    }
+
+    if (!s_ || !((zmq::socket_base_t*)s_)->check_tag ()) {
+        errno = ENOTSOCK;
+        return -1;
+    }
+
+    if (!routing_id || routing_id_len <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    //TODO: check right socket type
+
+    zmq::socket_base_t *socket = (zmq::socket_base_t*)s_;
+
+    return ((zmq::socket_poller_t*)poller_)->add (socket, routing_id,
+                                                  routing_id_len,
+                                                  user_data_,
+                                                  events_);
+}
+
+int zmq_poller_modify_peer (void *poller_, void *s_, void *routing_id,
+                                                  int routing_id_len,
+                                                  short events_)
+{
+    if (!poller_ || !((zmq::socket_poller_t*)poller_)->check_tag ()) {
+        errno = EFAULT;
+        return -1;
+    }
+
+    if (!s_ || !((zmq::socket_base_t*)s_)->check_tag ()) {
+        errno = ENOTSOCK;
+        return -1;
+    }
+
+    if (!routing_id || routing_id_len <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    //TODO: check right socket type
+
+    zmq::socket_base_t *socket = (zmq::socket_base_t*)s_;
+
+    return ((zmq::socket_poller_t*)poller_)->modify (socket,
+                                                     routing_id,
+                                                     routing_id_len,
+                                                     events_);
+}
+
+int zmq_poller_remove_peer (void *poller_, void *s_, void *routing_id,
+                                                     int routing_id_len)
+{
+    if (!poller_ || !((zmq::socket_poller_t*)poller_)->check_tag ()) {
+        errno = EFAULT;
+        return -1;
+    }
+
+    if (!s_ || !((zmq::socket_base_t*)s_)->check_tag ()) {
+        errno = ENOTSOCK;
+        return -1;
+    }
+
+    if (!routing_id || routing_id_len <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    //TODO: check right socket type
+
+    zmq::socket_base_t *socket = (zmq::socket_base_t*)s_;
+
+    return ((zmq::socket_poller_t*)poller_)->remove (socket, routing_id,
+                                                     routing_id_len);
+}
+#endif // ZMQ_BUILD_DRAFT_API
 
 #if defined _WIN32
 int zmq_poller_remove_fd (void *poller_, SOCKET fd_)
@@ -1341,11 +1508,12 @@ int zmq_poller_wait_all (void *poller_,
     return rc;
 }
 
+#ifdef ZMQ_BUILD_DRAFT_API
+
 //  Peer-specific state
 
-int zmq_socket_get_peer_state (void *s_,
-                               const void *routing_id_,
-                               size_t routing_id_size_)
+int zmq_socket_get_peer_state (void *s_, const void *routing_id_,
+                                         const size_t routing_id_size_)
 {
     zmq::socket_base_t *s = as_socket_base_t (s_);
     if (!s)
@@ -1353,6 +1521,8 @@ int zmq_socket_get_peer_state (void *s_,
 
     return s->get_peer_state (routing_id_, routing_id_size_);
 }
+
+#endif // ZMQ_BUILD_DRAFT_API
 
 //  Timers
 
